@@ -8,6 +8,7 @@ let data = {
 };
 let currentBalance = 0;
 let rate = 0;
+let html5QrCode = null; // for scanner
 
 function loadData() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -323,6 +324,140 @@ document.getElementById('settingsToggle').addEventListener('click', function() {
   document.getElementById('settingsView').classList.add('active');
 });
 
+// ===================== BARCODE SCANNER =====================
+document.getElementById('scanBarcodeBtn').addEventListener('click', function() {
+  openScanner();
+});
+
+document.getElementById('closeScannerBtn').addEventListener('click', function() {
+  closeScanner();
+});
+document.getElementById('scannerModal').addEventListener('click', function(e) {
+  if (e.target === this) closeScanner();
+});
+
+function openScanner() {
+  const modal = document.getElementById('scannerModal');
+  modal.classList.add('active');
+  
+  // Start scanner after modal opens
+  setTimeout(() => {
+    startScanner();
+  }, 300);
+}
+
+function startScanner() {
+  const container = document.getElementById('scannerContainer');
+  
+  if (html5QrCode) {
+    html5QrCode.clear();
+    html5QrCode = null;
+  }
+  
+  html5QrCode = new Html5Qrcode("scannerContainer");
+  
+  const config = {
+    fps: 15,
+    qrbox: { width: 250, height: 150 },
+    aspectRatio: 1.0
+  };
+  
+  html5QrCode.start(
+    { facingMode: "environment" },
+    config,
+    onScanSuccess,
+    onScanError
+  ).catch(err => {
+    console.error("Camera error:", err);
+    alert("Could not access camera. Please grant camera permission and try again.");
+    closeScanner();
+  });
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+  // DecodedText is the barcode number
+  console.log("Scanned barcode:", decodedText);
+  // Stop scanning immediately
+  if (html5QrCode) {
+    html5QrCode.stop();
+    html5QrCode.clear();
+    html5QrCode = null;
+  }
+  // Fetch product info
+  fetchProductByBarcode(decodedText);
+}
+
+function onScanError(err) {
+  // Ignore – keeps scanning
+}
+
+async function fetchProductByBarcode(barcode) {
+  const region = data.region;
+  const url = `https://${region}.openfoodfacts.org/api/v0/product/${barcode}.json`;
+  
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    
+    if (json.status === 0 || !json.product) {
+      alert(`No product found for barcode: ${barcode}`);
+      closeScanner();
+      return;
+    }
+    
+    const product = json.product;
+    const name = product.product_name || product.brands || 'Unknown product';
+    let cals = 0;
+    
+    // Try to get calories per 100g
+    if (product.nutriments) {
+      cals = product.nutriments['energy-kcal_100g'] || 
+             product.nutriments['energy-kcal'] || 
+             product.nutriments['energy_100g'] || 0;
+    }
+    
+    // If no per 100g, try per serving
+    if (cals === 0 && product.serving_quantity) {
+      cals = product.nutriments?.['energy-kcal'] || 0;
+    }
+    
+    if (cals === 0) {
+      alert(`Product found but no calorie data available.\n${name}`);
+      closeScanner();
+      return;
+    }
+    
+    // Round to nearest integer
+    cals = Math.round(cals);
+    
+    // Confirm with user before adding
+    if (confirm(`Add ${cals} kcal for "${name}"?`)) {
+      addCalories(cals, `📷 ${name} (barcode)`);
+    }
+    
+    closeScanner();
+    
+  } catch(err) {
+    console.error("Fetch error:", err);
+    alert("Error fetching product. Check your internet connection.");
+    closeScanner();
+  }
+}
+
+function closeScanner() {
+  if (html5QrCode) {
+    try {
+      html5QrCode.stop();
+      html5QrCode.clear();
+    } catch(e) {}
+    html5QrCode = null;
+  }
+  document.getElementById('scannerModal').classList.remove('active');
+  // Clear container
+  document.getElementById('scannerContainer').innerHTML = '';
+}
+
+// ===================== START APP =====================
 loadData();
 updateUI();
 renderLog();
