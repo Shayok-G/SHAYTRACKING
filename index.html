@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Calorie Bank</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Barcode scanner library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
   <div id="app">
@@ -23,17 +25,21 @@
           <div class="balance-label">kcal available</div>
           <div class="rate-info" id="rateDisplay">+104 kcal/hour</div>
         </div>
+
         <div class="quick-actions">
           <button class="quick-btn" data-cals="100">+100</button>
           <button class="quick-btn" data-cals="200">+200</button>
           <button class="quick-btn" data-cals="500">+500</button>
           <button class="quick-btn custom" id="customAddBtn">+ Custom</button>
+          <button class="quick-btn scan-btn" id="scanBarcodeBtn">📷 Scan</button>
         </div>
+
         <div class="food-search">
           <input type="text" id="foodSearch" placeholder="Search food (UK/US)" />
           <button id="searchFoodBtn">🔍</button>
         </div>
         <div id="foodResults" class="food-results"></div>
+
         <div class="manual-add">
           <input type="number" id="manualCals" placeholder="Or type calories" />
           <button id="manualAddBtn">Add</button>
@@ -77,6 +83,7 @@
         </div>
       </section>
     </main>
+
     <nav>
       <button class="nav-btn active" data-view="homeView">🏠 Home</button>
       <button class="nav-btn" data-view="logView">📋 Log</button>
@@ -97,6 +104,17 @@
       <button id="editSaveBtn">Save Changes</button>
     </div>
   </div>
+
+  <!-- BARCODE SCANNER MODAL -->
+  <div id="scannerModal" class="modal">
+    <div class="modal-content scanner-modal">
+      <span class="close-modal" id="closeScannerBtn">&times;</span>
+      <h3>📷 Scan Barcode</h3>
+      <div id="scannerContainer" style="width:100%; max-width:400px; margin:0 auto;"></div>
+      <p style="font-size:12px; color:#64748b; margin-top:8px;">Point at any food barcode</p>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
