@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Calorie Bank</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Barcode scanner library -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
@@ -40,9 +39,17 @@
         </div>
         <div id="foodResults" class="food-results"></div>
 
+        <!-- MANUAL ENTRY WITH MACROS -->
         <div class="manual-add">
-          <input type="number" id="manualCals" placeholder="Or type calories" />
-          <button id="manualAddBtn">Add</button>
+          <div class="manual-row">
+            <input type="number" id="manualCals" placeholder="Calories" />
+            <button id="manualAddBtn">Add</button>
+          </div>
+          <div class="macro-row">
+            <input type="number" id="manualProtein" placeholder="P (g)" step="0.1" />
+            <input type="number" id="manualCarbs" placeholder="C (g)" step="0.1" />
+            <input type="number" id="manualFat" placeholder="F (g)" step="0.1" />
+          </div>
         </div>
       </section>
 
@@ -105,14 +112,14 @@
     </div>
   </div>
 
-  <!-- BARCODE SCANNER MODAL -->
-  <div id="scannerModal" class="modal">
-    <div class="modal-content scanner-modal">
-      <span class="close-modal" id="closeScannerBtn">&times;</span>
-      <h3>📷 Scan Barcode</h3>
-      <div id="scannerContainer" style="width:100%; max-width:400px; margin:0 auto;"></div>
-      <p style="font-size:12px; color:#64748b; margin-top:8px;">Point at any food barcode</p>
+  <!-- FULL SCREEN SCANNER MODAL -->
+  <div id="scannerModal" class="modal scanner-fullscreen">
+    <div class="scanner-header">
+      <span class="close-scanner" id="closeScannerBtn">&times;</span>
+      <span id="scannerStatus">📷 Initializing camera...</span>
     </div>
+    <div id="scannerContainer"></div>
+    <div class="scanner-footer">Point at any food barcode</div>
   </div>
 
   <script src="script.js"></script>
