@@ -21,3 +21,39 @@
   width: 100%;
   display: block;
 }
+
+/* Macros in log */
+.log-day-macros {
+  font-size: 13px;
+  color: #475569;
+  margin-top: 4px;
+  font-weight: 500;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+/* Scan button */
+.scan-btn {
+  background: #8b5cf6 !important;
+  color: white !important;
+}
+.scan-btn:hover {
+  background: #7c3aed !important;
+}
+
+/* Scanner modal */
+.scanner-modal {
+  max-width: 420px;
+}
+#scannerContainer {
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 250px;
+}
+#scannerContainer video {
+  width: 100%;
+  display: block;
+}
