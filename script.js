@@ -8,7 +8,7 @@ let data = {
 };
 let currentBalance = 0;
 let rate = 0;
-let html5QrCode = null; // for scanner
+let html5QrCode = null;
 
 function loadData() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -64,20 +64,39 @@ function drawRing(balance) {
 
 let foodResults = [];
 async function searchFood(query) {
-  if (!query.trim()) return;
+  if (!query.trim()) {
+    document.getElementById('foodResults').innerHTML = '';
+    return;
+  }
   const region = data.region;
   const url = `https://${region}.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10`;
   try {
     const res = await fetch(url);
     const json = await res.json();
     const products = json.products || [];
-    foodResults = products.map(p => ({
-      name: p.product_name || p.brands || 'Unknown',
-      cal: p.nutriments?.energy_kcal_100g || 0,
-      serving: p.serving_size || '100g'
-    })).filter(f => f.cal > 0);
+    foodResults = products.map(p => {
+      const nutriments = p.nutriments || {};
+      // Try multiple possible keys for calories
+      let cal = nutriments['energy-kcal_100g'] || nutriments['energy_100g'] || nutriments['energy_kcal_100g'] || nutriments['energy'] || 0;
+      if (typeof cal === 'string') cal = parseFloat(cal) || 0;
+      const protein = nutriments['proteins_100g'] || nutriments['protein_100g'] || 0;
+      const carbs = nutriments['carbohydrates_100g'] || nutriments['carbohydrate_100g'] || 0;
+      const fat = nutriments['fat_100g'] || nutriments['fat'] || 0;
+      return {
+        name: p.product_name || p.brands || 'Unknown',
+        cal: Math.round(cal),
+        protein: Math.round(protein * 10) / 10,
+        carbs: Math.round(carbs * 10) / 10,
+        fat: Math.round(fat * 10) / 10,
+        serving: p.serving_size || '100g'
+      };
+    }).filter(f => f.cal > 0);
     renderFoodResults();
-  } catch(e) { foodResults = []; renderFoodResults(); }
+  } catch(e) {
+    console.error('Search error:', e);
+    document.getElementById('foodResults').innerHTML = '<div class="food-result-item" style="color:#ef4444;">⚠️ Error searching. Check connection.</div>';
+    foodResults = [];
+  }
 }
 function renderFoodResults() {
   const container = document.getElementById('foodResults');
@@ -86,15 +105,21 @@ function renderFoodResults() {
     return;
   }
   container.innerHTML = foodResults.map(f => `
-    <div class="food-result-item" data-cal="${f.cal}">
+    <div class="food-result-item" data-cal="${f.cal}" data-protein="${f.protein}" data-carbs="${f.carbs}" data-fat="${f.fat}">
       <span>${f.name}</span>
-      <span>${f.cal} kcal / ${f.serving}</span>
+      <span style="font-size:12px;">${f.cal} kcal | P:${f.protein}g C:${f.carbs}g F:${f.fat}g / ${f.serving}</span>
     </div>
   `).join('');
   container.querySelectorAll('.food-result-item').forEach(el => {
     el.addEventListener('click', function() {
       const cals = parseFloat(this.dataset.cal);
-      if (cals > 0) addCalories(cals, this.querySelector('span')?.textContent || 'Food');
+      const protein = parseFloat(this.dataset.protein) || 0;
+      const carbs = parseFloat(this.dataset.carbs) || 0;
+      const fat = parseFloat(this.dataset.fat) || 0;
+      if (cals > 0) {
+        const name = this.querySelector('span')?.textContent || 'Food';
+        addCalories(cals, name, protein, carbs, fat);
+      }
       document.getElementById('foodSearch').value = '';
       foodResults = [];
       renderFoodResults();
@@ -102,12 +127,19 @@ function renderFoodResults() {
   });
 }
 
-function addCalories(cals, name = 'Manual') {
+function addCalories(cals, name = 'Manual', protein = 0, carbs = 0, fat = 0) {
   if (!cals || cals <= 0) return;
   data.loggedCalories += cals;
   const today = new Date().toISOString().split('T')[0];
   if (!data.history[today]) data.history[today] = [];
-  data.history[today].push({ cal: cals, name: name, time: new Date().toISOString() });
+  data.history[today].push({ 
+    cal: cals, 
+    name: name, 
+    protein: protein || 0,
+    carbs: carbs || 0,
+    fat: fat || 0,
+    time: new Date().toISOString() 
+  });
   saveData();
   updateUI();
   renderLog();
@@ -123,6 +155,9 @@ function renderLog() {
   container.innerHTML = dates.map(date => {
     const meals = data.history[date] || [];
     const total = meals.reduce((sum, m) => sum + m.cal, 0);
+    const totalP = meals.reduce((sum, m) => sum + (m.protein || 0), 0);
+    const totalC = meals.reduce((sum, m) => sum + (m.carbs || 0), 0);
+    const totalF = meals.reduce((sum, m) => sum + (m.fat || 0), 0);
     const detail = meals.map(m => `${m.cal} kcal`).join(', ');
     return `
       <div class="log-day" data-date="${date}">
@@ -130,7 +165,12 @@ function renderLog() {
           <span>${date}</span>
           <span>${total} kcal</span>
         </div>
-        <div class="log-day-detail">${detail}</div>
+        <div class="log-day-detail">
+          ${detail}
+        </div>
+        <div class="log-day-macros">
+          P: ${totalP.toFixed(0)}g  |  C: ${totalC.toFixed(0)}g  |  F: ${totalF.toFixed(0)}g
+        </div>
       </div>
     `;
   }).join('');
@@ -157,7 +197,7 @@ function renderEditMeals(date) {
   }
   container.innerHTML = meals.map((m, idx) => `
     <div class="edit-meal-item">
-      <span>${m.name || 'Meal'}: ${m.cal} kcal</span>
+      <span>${m.name || 'Meal'}: ${m.cal} kcal (P:${m.protein||0} C:${m.carbs||0} F:${m.fat||0})</span>
       <button data-index="${idx}">✕</button>
     </div>
   `).join('');
@@ -178,7 +218,7 @@ document.getElementById('editAddMealBtn').addEventListener('click', function() {
   const cals = parseInt(input.value);
   if (cals > 0 && editDate) {
     if (!data.history[editDate]) data.history[editDate] = [];
-    data.history[editDate].push({ cal: cals, name: 'Added', time: new Date().toISOString() });
+    data.history[editDate].push({ cal: cals, name: 'Added', protein:0, carbs:0, fat:0, time: new Date().toISOString() });
     saveData();
     renderEditMeals(editDate);
     renderLog();
@@ -292,7 +332,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 
 document.querySelectorAll('.quick-btn[data-cals]').forEach(btn => {
   btn.addEventListener('click', function() {
-    addCalories(parseInt(this.dataset.cals), 'Quick');
+    addCalories(parseInt(this.dataset.cals), 'Quick', 0, 0, 0);
   });
 });
 document.getElementById('customAddBtn').addEventListener('click', function() {
@@ -301,7 +341,7 @@ document.getElementById('customAddBtn').addEventListener('click', function() {
 document.getElementById('manualAddBtn').addEventListener('click', function() {
   const cals = parseInt(document.getElementById('manualCals').value);
   if (cals > 0) {
-    addCalories(cals, 'Manual');
+    addCalories(cals, 'Manual', 0, 0, 0);
     document.getElementById('manualCals').value = '';
   }
 });
@@ -328,7 +368,6 @@ document.getElementById('settingsToggle').addEventListener('click', function() {
 document.getElementById('scanBarcodeBtn').addEventListener('click', function() {
   openScanner();
 });
-
 document.getElementById('closeScannerBtn').addEventListener('click', function() {
   closeScanner();
 });
@@ -339,125 +378,68 @@ document.getElementById('scannerModal').addEventListener('click', function(e) {
 function openScanner() {
   const modal = document.getElementById('scannerModal');
   modal.classList.add('active');
-  
-  // Start scanner after modal opens
-  setTimeout(() => {
-    startScanner();
-  }, 300);
+  setTimeout(() => { startScanner(); }, 300);
 }
-
 function startScanner() {
   const container = document.getElementById('scannerContainer');
-  
-  if (html5QrCode) {
-    html5QrCode.clear();
-    html5QrCode = null;
-  }
-  
+  if (html5QrCode) { html5QrCode.clear(); html5QrCode = null; }
   html5QrCode = new Html5Qrcode("scannerContainer");
-  
-  const config = {
-    fps: 15,
-    qrbox: { width: 250, height: 150 },
-    aspectRatio: 1.0
-  };
-  
-  html5QrCode.start(
-    { facingMode: "environment" },
-    config,
-    onScanSuccess,
-    onScanError
-  ).catch(err => {
-    console.error("Camera error:", err);
-    alert("Could not access camera. Please grant camera permission and try again.");
-    closeScanner();
-  });
+  const config = { fps: 15, qrbox: { width: 250, height: 150 }, aspectRatio: 1.0 };
+  html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanError)
+    .catch(err => {
+      console.error("Camera error:", err);
+      alert("Could not access camera. Please grant camera permission.");
+      closeScanner();
+    });
 }
-
 function onScanSuccess(decodedText, decodedResult) {
-  // DecodedText is the barcode number
-  console.log("Scanned barcode:", decodedText);
-  // Stop scanning immediately
-  if (html5QrCode) {
-    html5QrCode.stop();
-    html5QrCode.clear();
-    html5QrCode = null;
-  }
-  // Fetch product info
+  if (html5QrCode) { html5QrCode.stop(); html5QrCode.clear(); html5QrCode = null; }
   fetchProductByBarcode(decodedText);
 }
-
-function onScanError(err) {
-  // Ignore – keeps scanning
-}
+function onScanError(err) { /* ignore */ }
 
 async function fetchProductByBarcode(barcode) {
   const region = data.region;
   const url = `https://${region}.openfoodfacts.org/api/v0/product/${barcode}.json`;
-  
   try {
     const res = await fetch(url);
     const json = await res.json();
-    
     if (json.status === 0 || !json.product) {
       alert(`No product found for barcode: ${barcode}`);
       closeScanner();
       return;
     }
-    
     const product = json.product;
     const name = product.product_name || product.brands || 'Unknown product';
-    let cals = 0;
-    
-    // Try to get calories per 100g
-    if (product.nutriments) {
-      cals = product.nutriments['energy-kcal_100g'] || 
-             product.nutriments['energy-kcal'] || 
-             product.nutriments['energy_100g'] || 0;
-    }
-    
-    // If no per 100g, try per serving
-    if (cals === 0 && product.serving_quantity) {
-      cals = product.nutriments?.['energy-kcal'] || 0;
-    }
+    const nutriments = product.nutriments || {};
+    let cals = nutriments['energy-kcal_100g'] || nutriments['energy_100g'] || nutriments['energy'] || 0;
+    if (typeof cals === 'string') cals = parseFloat(cals) || 0;
+    cals = Math.round(cals);
+    const protein = Math.round((nutriments['proteins_100g'] || 0) * 10) / 10;
+    const carbs = Math.round((nutriments['carbohydrates_100g'] || 0) * 10) / 10;
+    const fat = Math.round((nutriments['fat_100g'] || 0) * 10) / 10;
     
     if (cals === 0) {
-      alert(`Product found but no calorie data available.\n${name}`);
+      alert(`Product found but no calorie data.\n${name}`);
       closeScanner();
       return;
     }
-    
-    // Round to nearest integer
-    cals = Math.round(cals);
-    
-    // Confirm with user before adding
-    if (confirm(`Add ${cals} kcal for "${name}"?`)) {
-      addCalories(cals, `📷 ${name} (barcode)`);
+    if (confirm(`Add ${cals} kcal for "${name}"?\nP:${protein}g C:${carbs}g F:${fat}g`)) {
+      addCalories(cals, `📷 ${name}`, protein, carbs, fat);
     }
-    
     closeScanner();
-    
   } catch(err) {
     console.error("Fetch error:", err);
-    alert("Error fetching product. Check your internet connection.");
+    alert("Error fetching product. Check internet.");
     closeScanner();
   }
 }
-
 function closeScanner() {
-  if (html5QrCode) {
-    try {
-      html5QrCode.stop();
-      html5QrCode.clear();
-    } catch(e) {}
-    html5QrCode = null;
-  }
+  if (html5QrCode) { try { html5QrCode.stop(); html5QrCode.clear(); } catch(e) {} html5QrCode = null; }
   document.getElementById('scannerModal').classList.remove('active');
-  // Clear container
   document.getElementById('scannerContainer').innerHTML = '';
 }
 
-// ===================== START APP =====================
 loadData();
 updateUI();
 renderLog();
